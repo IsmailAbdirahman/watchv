@@ -12,7 +12,7 @@ class DisplayData extends StatefulWidget {
 class _DisplayDataState extends State<DisplayData> {
   int _currentIndex = 0;
   final List<Widget> _children = [
-    MyHomePage(title: 'Video Downloader'),
+    MyHomePage(),
     DownloadData(),
   ];
 
