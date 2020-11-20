@@ -1,12 +1,17 @@
 import 'dart:io';
-
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:isolate';
 import 'dart:ui';
+import 'package:watchv/database/database.dart';
+
+final hiveDatabaseProvider = ChangeNotifierProvider<Database>((ref) {
+  return Database();
+});
 
 class MyHomePage extends StatefulWidget {
   MyHomePage({Key key, this.title}) : super(key: key);
@@ -33,6 +38,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+
     //register a send port for the other isolates
     IsolateNameServer.registerPortWithName(
         _receivePort.sendPort, "downloading");
@@ -46,7 +52,15 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     FlutterDownloader.registerCallback(downloadingInfo);
-    // initializePlayer();
+    initTheData();
+  }
+
+  initTheData() async {
+    List<String> listOfIds = [];
+    await context.read(hiveDatabaseProvider).getData();
+    listOfIds = context.read(hiveDatabaseProvider).ids;
+
+    initializePlayer(savedIds: listOfIds.last);
   }
 
   @override
@@ -58,20 +72,24 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
-  Future<void> initializePlayer(String url) async {
+  urlConfig(String url) {
     String unWantedString = url.substring(0, 65);
     String wantedString = url.replaceAll(unWantedString, "");
+    Database().addData(wantedString);
+  }
+
+  Future<void> initializePlayer({String savedIds}) async {
     final status = await Permission.storage.request();
     if (status.isGranted) {
-      var myFile = new File("/sdcard/Download/$wantedString");
+      var myFile = new File("/sdcard/Download/$savedIds");
 
       _videoPlayerController1 = VideoPlayerController.file(myFile);
       await _videoPlayerController1.initialize();
 
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController1,
-        autoPlay: true,
-        looping: true,
+        autoPlay: false,
+        looping: false,
       );
 
       setState(() {});
@@ -117,10 +135,11 @@ class _MyHomePageState extends State<MyHomePage> {
               }),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left:10.0,right: 10.0),
+              padding: const EdgeInsets.only(left: 10.0, right: 10.0),
               child: Center(
                 child: _chewieController != null &&
-                        _chewieController.videoPlayerController.value.initialized
+                        _chewieController
+                            .videoPlayerController.value.initialized
                     ? Chewie(
                         controller: _chewieController,
                       )
@@ -149,7 +168,10 @@ class _MyHomePageState extends State<MyHomePage> {
         savedDir: '/sdcard/Download',
         showNotification: true,
         openFileFromNotification: true,
-      ).then((_) => initializePlayer(url));
+      ).then((_) {
+        urlConfig(url);
+        initTheData();
+      });
     } else {
       Scaffold.of(context)
           .showSnackBar(SnackBar(content: Text("Permission denied")));
