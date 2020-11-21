@@ -15,14 +15,12 @@ class _DisplayDataState extends State<DisplayData> {
     MyHomePage(),
     DownloadData(),
   ];
-
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
-          children: _children,
+        body: Center(
+          child: _children.elementAt(_currentIndex),
         ),
         bottomNavigationBar: BottomNavigationBar(
             onTap: onTabTapped,

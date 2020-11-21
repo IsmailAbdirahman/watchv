@@ -30,29 +30,33 @@ class _MyHomePageState extends State<MyHomePage> {
 
   static downloadingInfo(id, status, progress) {
     //Looking up for a send port
-    SendPort sendPort = IsolateNameServer.lookupPortByName("downloading");
+    SendPort sendPort =
+        IsolateNameServer.lookupPortByName("downloader_send_port");
     //Sending the data
     sendPort.send([id, status, progress]);
   }
 
   @override
   void initState() {
-    super.initState();
+    if (IsolateNameServer.lookupPortByName('downloader_send_port') != null) {
+      IsolateNameServer.removePortNameMapping('downloader_send_port');
+    }
 
     //register a send port for the other isolates
     IsolateNameServer.registerPortWithName(
-        _receivePort.sendPort, "downloading");
+        _receivePort.sendPort, "downloader_send_port");
 
     //Listening for the data is coming other isolates
     _receivePort.listen((message) {
-      setState(() {
-        progress = message[2];
-      });
+      progress = message[2];
       print(progress);
+      if (!mounted) return;
+      setState(() {});
     });
 
     FlutterDownloader.registerCallback(downloadingInfo);
     initTheData();
+    super.initState();
   }
 
   initTheData() async {
@@ -60,15 +64,18 @@ class _MyHomePageState extends State<MyHomePage> {
     await context.read(hiveDatabaseProvider).getData();
     listOfIds = context.read(hiveDatabaseProvider).ids;
 
-    initializePlayer(savedIds: listOfIds.last);
+    if (listOfIds.length != 0) {
+      initializePlayer(savedIds: listOfIds.last);
+    }
   }
 
   @override
   void dispose() {
-    print('dispose');
-    _videoUrlController.dispose();
-    _videoPlayerController1.dispose();
-    _chewieController.dispose();
+    print(
+        '**************************************************************************dispose');
+    _videoUrlController?.dispose();
+    _videoPlayerController1?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
@@ -85,16 +92,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
       _videoPlayerController1 = VideoPlayerController.file(myFile);
       await _videoPlayerController1.initialize();
-
-      _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController1,
-        autoPlay: false,
-        looping: false,
-      );
-
-      setState(() {});
+      setState(() {
+        _chewieController = ChewieController(
+          videoPlayerController: _videoPlayerController1,
+          autoPlay: false,
+          looping: false,
+        );
+      });
     }
-    setState(() {});
   }
 
   @override
@@ -132,6 +137,7 @@ class _MyHomePageState extends State<MyHomePage> {
               textColor: Colors.white,
               onPressed: () {
                 startDownloading(_videoUrlController.text, context);
+                FocusScope.of(context).unfocus();
               }),
           Expanded(
             child: Padding(
