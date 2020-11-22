@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:chewie/chewie.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Key;
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -8,22 +9,26 @@ import 'package:video_player/video_player.dart';
 import 'dart:isolate';
 import 'dart:ui';
 import 'package:watchv/database/database.dart';
+import 'package:watchv/utils/encrypt_data.dart';
+import 'package:need_resume/need_resume.dart';
 
 final hiveDatabaseProvider = ChangeNotifierProvider<Database>((ref) {
   return Database();
 });
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
+  MyHomePage({this.title});
+
   final String title;
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends ResumableState<MyHomePage> {
   TextEditingController _videoUrlController = TextEditingController();
   int progress = 0;
+  String deleteVideo = '';
   ReceivePort _receivePort = ReceivePort();
   VideoPlayerController _videoPlayerController1;
   ChewieController _chewieController;
@@ -55,42 +60,43 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     FlutterDownloader.registerCallback(downloadingInfo);
-    initTheData();
+    displayDownloadedVideo();
     super.initState();
   }
 
-  initTheData() async {
+  displayDownloadedVideo() async {
     List<String> listOfIds = [];
     await context.read(hiveDatabaseProvider).getData();
     listOfIds = context.read(hiveDatabaseProvider).ids;
-
     if (listOfIds.length != 0) {
       initializePlayer(savedIds: listOfIds.last);
     }
   }
 
-  @override
-  void dispose() {
-    print(
-        '**************************************************************************dispose');
-    _videoUrlController?.dispose();
-    _videoPlayerController1?.dispose();
-    _chewieController?.dispose();
-    super.dispose();
-  }
-
-  urlConfig(String url) {
-    String unWantedString = url.substring(0, 65);
-    String wantedString = url.replaceAll(unWantedString, "");
-    Database().addData(wantedString);
+  Future<String> urlConfig(String url) async {
+    var unWantedString = url.substring(0, 65);
+    var wantedString = url.replaceAll(unWantedString, "");
+    return wantedString;
   }
 
   Future<void> initializePlayer({String savedIds}) async {
     final status = await Permission.storage.request();
     if (status.isGranted) {
-      var myFile = new File("/sdcard/Download/$savedIds");
+      //encrypted Path
+      String subSave = savedIds.substring(0, 17);
+      String replace = savedIds.replaceAll(subSave, "");
+      String newSaveIds = "/storage/emulated/0/Download/$replace";
 
-      _videoPlayerController1 = VideoPlayerController.file(myFile);
+      var decryptedVideo = EncryptionClass().decryptFactory(newSaveIds);
+      //decrypted path for deleting the saved video
+      String unWantedPath = decryptedVideo.substring(0, 29);
+      String wantedPath = decryptedVideo.replaceAll(unWantedPath, "");
+      String conca = subSave + wantedPath;
+      deleteVideo = conca;
+
+      var myNewFile = new File(decryptedVideo);
+
+      _videoPlayerController1 = VideoPlayerController.file(myNewFile);
       await _videoPlayerController1.initialize();
       setState(() {
         _chewieController = ChewieController(
@@ -100,6 +106,30 @@ class _MyHomePageState extends State<MyHomePage> {
         );
       });
     }
+  }
+
+  @override
+  void onPause() {
+    deleteWatchedVideo();
+  }
+
+  deleteWatchedVideo() async {
+    var myFile = new File(deleteVideo);
+    var fileToDelete = File(myFile.path);
+    bool isExist = await fileToDelete.exists();
+    if (isExist) {
+      await fileToDelete.delete();
+    }
+  }
+
+  @override
+  void dispose() {
+    print('dispose is called');
+    _videoUrlController?.dispose();
+    _videoPlayerController1?.dispose();
+    _chewieController?.dispose();
+    deleteWatchedVideo();
+    super.dispose();
   }
 
   @override
@@ -135,8 +165,12 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Text("Download"),
               color: Colors.blue,
               textColor: Colors.white,
-              onPressed: () {
-                startDownloading(_videoUrlController.text, context);
+              onPressed: () async {
+                deleteWatchedVideo();
+                await startDownloading(_videoUrlController.text, context);
+                Timer(Duration(seconds: 2), () {
+                  downloadEncryptedFileInfo(_videoUrlController.text);
+                });
                 FocusScope.of(context).unfocus();
               }),
           Expanded(
@@ -166,7 +200,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  void startDownloading(String url, BuildContext context) async {
+  Future<void> startDownloading(String url, BuildContext context) async {
     final status = await Permission.storage.request();
     if (status.isGranted) {
       await FlutterDownloader.enqueue(
@@ -174,13 +208,28 @@ class _MyHomePageState extends State<MyHomePage> {
         savedDir: '/sdcard/Download',
         showNotification: true,
         openFileFromNotification: true,
-      ).then((_) {
-        urlConfig(url);
-        initTheData();
-      });
+      );
     } else {
       Scaffold.of(context)
           .showSnackBar(SnackBar(content: Text("Permission denied")));
     }
   }
+
+  String encryptionVideo(String videoToEncrypt) {
+    var encryptedVideo = EncryptionClass().encryptFactory(videoToEncrypt);
+    return encryptedVideo;
+  }
+
+  String decryptionVideo(String videoToDecrypt) {
+    var decryptedVideo = EncryptionClass().decryptFactory(videoToDecrypt);
+    return decryptedVideo;
+  }
+
+  Future downloadEncryptedFileInfo(String url) async {
+    String fileToEncrypt = await urlConfig(url);
+    String encryptedVideo = encryptionVideo("/sdcard/Download/$fileToEncrypt");
+    await Database().addData(encryptedVideo);
+    await displayDownloadedVideo();
+  }
+
 }

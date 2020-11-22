@@ -37,6 +37,10 @@ dependencies:
   hive: ^1.4.4+1
   hive_flutter: ^0.3.1
   hooks_riverpod: ^0.11.2
+  aes_crypt: ^0.1.1
+  need_resume: ^1.0.5+1
+
+
 
 
 

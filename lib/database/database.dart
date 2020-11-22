@@ -5,7 +5,7 @@ import '../main.dart';
 class Database extends ChangeNotifier {
   List<String> ids = [];
 
-  void addData(String id) async {
+  Future addData(String id) async {
     Box<String> todayInfo = await Hive.openBox<String>(idsBox);
     todayInfo.add(id);
     notifyListeners();
